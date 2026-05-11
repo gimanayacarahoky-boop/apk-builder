@@ -1,17 +1,10 @@
-name: 🔥 Auto Flutter/Android Build (Hybrid)
+name: 🔥 Auto Flutter Build
 
 on:
   push:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      queue_id:
-        required: false
-        default: ''
-      zip_url:
-        required: false
-        default: ''
 
 jobs:
   build:
@@ -21,82 +14,35 @@ jobs:
       - name: 📥 Checkout Repo
         uses: actions/checkout@v4
 
-      - name: 📥 Download ZIP (jika ada input)
-        if: github.event.inputs.zip_url != ''
-        run: wget "${{ github.event.inputs.zip_url }}" -O project.zip
-
-      - name: 📂 Ekstrak ZIP (jika ada)
-        if: github.event.inputs.zip_url != ''
-        run: unzip -q project.zip -d project && ls project
-
       - name: 🚀 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
 
-      - name: 🔍 Cari pubspec.yaml
+      - name: 🔍 Find pubspec.yaml
         id: find_project
         run: |
           echo "Mencari pubspec.yaml..."
-
-          # Jika ada folder project (dari ZIP), cari di situ dulu
-          if [ -d "project" ]; then
-            SEARCH_DIR="project"
-          else
-            SEARCH_DIR="."
-          fi
-
-          PUBSPEC_PATH=$(find $SEARCH_DIR -type f -name "pubspec.yaml" | head -n 1)
-
+          PUBSPEC_PATH=$(find . -type f -name "pubspec.yaml" | head -n 1)
           if [ -z "$PUBSPEC_PATH" ]; then
             echo "❌ pubspec.yaml tidak ditemukan!"
-            echo "IS_FLUTTER=false" >> $GITHUB_ENV
-          else
-            PROJECT_DIR=$(dirname "$PUBSPEC_PATH")
-            echo "✅ Ditemukan di: $PROJECT_DIR"
-            echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
-            echo "IS_FLUTTER=true" >> $GITHUB_ENV
+            exit 1
           fi
+          PROJECT_DIR=$(dirname "$PUBSPEC_PATH")
+          echo "✅ Ditemukan di: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
 
       - name: 📦 Flutter Pub Get
-        if: env.IS_FLUTTER == 'true'
         run: flutter pub get
         working-directory: ${{ env.PROJECT_DIR }}
 
-      - name: 🔨 Build Flutter APK
-        if: env.IS_FLUTTER == 'true'
+      - name: 🔨 Build APK
         run: flutter build apk --release
         working-directory: ${{ env.PROJECT_DIR }}
 
-      - name: ☕ Setup Java (untuk Android native)
-        if: env.IS_FLUTTER != 'true'
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: 🔨 Build Android APK
-        if: env.IS_FLUTTER != 'true'
-        run: |
-          if [ -d "project" ]; then cd project; fi
-          chmod +x gradlew
-          ./gradlew assembleRelease
-          find . -name "*.apk" -exec cp {} ../app-release.apk \;
-
-      - name: 📤 Upload APK (Flutter)
-        if: env.IS_FLUTTER == 'true'
+      - name: 📤 Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
-
-      - name: 📤 Upload APK (Android)
-        if: env.IS_FLUTTER != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: app-release.apk
-
-      - name: 🧹 Cleanup ZIP
-        if: always()
-        run: rm -rf project project.zip
+      
