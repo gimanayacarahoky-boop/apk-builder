@@ -1,0 +1,57 @@
+name: Build APK
+on:
+  workflow_dispatch:
+    inputs:
+      queue_id:
+        required: true
+      zip_url:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download ZIP
+        run: wget "${{ github.event.inputs.zip_url }}" -O project.zip
+      - name: Extract project
+        run: unzip -q project.zip -d project && ls project
+      - name: Detect project type
+        id: detect
+        run: |
+          if [ -f project/pubspec.yaml ]; then
+            echo "type=flutter" >> $GITHUB_OUTPUT
+          else
+            echo "type=android" >> $GITHUB_OUTPUT
+          fi
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Set up Flutter
+        if: steps.detect.outputs.type == 'flutter'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+      - name: Build Flutter APK
+        if: steps.detect.outputs.type == 'flutter'
+        run: |
+          cd project
+          flutter pub get
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk ../app-release.apk
+      - name: Build Android APK
+        if: steps.detect.outputs.type == 'android'
+        run: |
+          cd project
+          chmod +x gradlew
+          ./gradlew assembleRelease
+          find . -name "*.apk" -exec cp {} ../app-release.apk \;
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-release
+          path: app-release.apk
+      - name: Clean up
+        run: rm -rf project project.zip
