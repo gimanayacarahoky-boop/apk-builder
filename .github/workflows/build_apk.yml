@@ -49,9 +49,11 @@ jobs:
           ./gradlew assembleRelease
           find . -name "*.apk" -exec cp {} ../app-release.apk \;
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v3
         with:
           name: app-release
           path: app-release.apk
       - name: Clean up
+        if: always()
         run: rm -rf project project.zip
